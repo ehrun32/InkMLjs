@@ -35,6 +35,11 @@
         var currentStroke = [];
         var strokes = [];
         var startTime = null;
+        var sampleId = "example_" + Date.now();
+
+        function formatPoint(x, y, t) {
+          return `    ${x.toFixed(1)} ${y.toFixed(1)} ${t}`;
+        }
 
         // Drawing functions
         function startDrawing(e) {
@@ -45,15 +50,15 @@
           var x = e.clientX - rect.left;
           var y = e.clientY - rect.top;
 
-          // Scale coordinates to a standard range (e.g., 0-1000)
-          var scaledX = (x / canvas.width) * 1000;
-          var scaledY = (y / canvas.height) * 1000;
+          // Scale coordinates to match the example range
+          var scaledX = (x / canvas.width) * 250;
+          var scaledY = (y / canvas.height) * 250;
 
           currentStroke = [
             {
               x: scaledX,
               y: scaledY,
-              t: Date.now() - startTime,
+              t: 0,
             },
           ];
 
@@ -70,14 +75,14 @@
           var x = e.clientX - rect.left;
           var y = e.clientY - rect.top;
 
-          // Scale coordinates
-          var scaledX = (x / canvas.width) * 1000;
-          var scaledY = (y / canvas.height) * 1000;
+          var scaledX = (x / canvas.width) * 250;
+          var scaledY = (y / canvas.height) * 250;
+          var time = Date.now() - startTime;
 
           currentStroke.push({
             x: scaledX,
             y: scaledY,
-            t: Date.now() - startTime,
+            t: Math.floor(time / 10) * 10, // Round to nearest 10ms
           });
 
           ctx.lineTo(x, y);
@@ -95,29 +100,24 @@
         }
 
         function convertToInkML() {
-          var inkml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-          inkml += '<ink xmlns="http://www.w3.org/2003/InkML">\n';
-          inkml += '<annotation type="inkCreationMethod">human</annotation>\n';
-          inkml += "<traceFormat>\n";
+          var inkml = '<ink xmlns="http://www.w3.org/2003/InkML">\n';
+          inkml += '  <annotation type="label">hello</annotation>\n';
+          inkml +=
+            '  <annotation type="sampleId">' + sampleId + "</annotation>\n";
+          inkml += "  <traceFormat>\n";
           inkml += '    <channel name="X" type="decimal"/>\n';
           inkml += '    <channel name="Y" type="decimal"/>\n';
-          inkml += '    <channel name="T" type="decimal" units="ms"/>\n';
-          inkml += "</traceFormat>\n";
+          inkml += '    <channel name="T" type="decimal"/>\n';
+          inkml += "  </traceFormat>\n";
 
           strokes.forEach(function (stroke, index) {
-            inkml += '<trace id="' + index + '">';
+            inkml += '  <trace id="' + index + '">\n';
             inkml += stroke
               .map(function (point) {
-                return (
-                  point.x.toFixed(2) +
-                  " " +
-                  point.y.toFixed(2) +
-                  " " +
-                  point.t.toFixed(1)
-                );
+                return formatPoint(point.x, point.y, point.t);
               })
-              .join(",\n    ");
-            inkml += "</trace>\n";
+              .join(",\n");
+            inkml += "\n  </trace>\n";
           });
 
           inkml += "</ink>";
@@ -148,8 +148,8 @@
             previewInkML += stroke
               .map(function (point) {
                 // Convert back to canvas coordinates for preview
-                var x = (point.x / 1000) * canvas.width;
-                var y = (point.y / 1000) * canvas.height;
+                var x = (point.x / 250) * canvas.width;
+                var y = (point.y / 250) * canvas.height;
                 return x.toFixed(2) + " " + y.toFixed(2) + " 0.5";
               })
               .join(", ");
@@ -171,6 +171,7 @@
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           strokes = [];
           startTime = null;
+          sampleId = "example_" + Date.now();
           document.getElementById("inkmlOutput").value = "";
           var previewCtx = previewCanvas.getContext("2d");
           previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
