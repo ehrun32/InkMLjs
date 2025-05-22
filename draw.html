@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>InkMLjs Drawing Example</title>
+    <script
+      type="text/javascript"
+      src="https://code.jquery.com/jquery-1.5.min.js"
+    ></script>
+    <script type="text/javascript" src="InkMLjs/inkml.js"></script>
+    <style>
+      canvas {
+        border: 1px solid #000;
+        cursor: crosshair;
+      }
+      #controls {
+        margin: 10px 0;
+      }
+      .canvas-container {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+      }
+      .canvas-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+    </style>
+    <script type="text/javascript">
+      $(document).ready(function () {
+        var canvas = document.getElementById("drawCanvas");
+        var previewCanvas = document.getElementById("previewCanvas");
+        var ctx = canvas.getContext("2d");
+        var isDrawing = false;
+        var currentStroke = [];
+        var strokes = [];
+        var startTime = null;
+
+        // Drawing functions
+        function startDrawing(e) {
+          isDrawing = true;
+          if (!startTime) startTime = Date.now();
+
+          var rect = canvas.getBoundingClientRect();
+          var x = e.clientX - rect.left;
+          var y = e.clientY - rect.top;
+
+          // Scale coordinates to a standard range (e.g., 0-1000)
+          var scaledX = (x / canvas.width) * 1000;
+          var scaledY = (y / canvas.height) * 1000;
+
+          currentStroke = [
+            {
+              x: scaledX,
+              y: scaledY,
+              t: Date.now() - startTime,
+            },
+          ];
+
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineWidth = 2;
+          ctx.lineCap = "round";
+          ctx.strokeStyle = "#000";
+        }
+
+        function draw(e) {
+          if (!isDrawing) return;
+          var rect = canvas.getBoundingClientRect();
+          var x = e.clientX - rect.left;
+          var y = e.clientY - rect.top;
+
+          // Scale coordinates
+          var scaledX = (x / canvas.width) * 1000;
+          var scaledY = (y / canvas.height) * 1000;
+
+          currentStroke.push({
+            x: scaledX,
+            y: scaledY,
+            t: Date.now() - startTime,
+          });
+
+          ctx.lineTo(x, y);
+          ctx.stroke();
+        }
+
+        function stopDrawing() {
+          if (!isDrawing) return;
+          isDrawing = false;
+          if (currentStroke.length > 0) {
+            strokes.push(currentStroke);
+            currentStroke = [];
+            convertToInkML();
+          }
+        }
+
+        function convertToInkML() {
+          var inkml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+          inkml += '<ink xmlns="http://www.w3.org/2003/InkML">\n';
+          inkml += '<annotation type="inkCreationMethod">human</annotation>\n';
+          inkml += "<traceFormat>\n";
+          inkml += '    <channel name="X" type="decimal"/>\n';
+          inkml += '    <channel name="Y" type="decimal"/>\n';
+          inkml += '    <channel name="T" type="decimal" units="ms"/>\n';
+          inkml += "</traceFormat>\n";
+
+          strokes.forEach(function (stroke, index) {
+            inkml += '<trace id="' + index + '">';
+            inkml += stroke
+              .map(function (point) {
+                return (
+                  point.x.toFixed(2) +
+                  " " +
+                  point.y.toFixed(2) +
+                  " " +
+                  point.t.toFixed(1)
+                );
+              })
+              .join(",\n    ");
+            inkml += "</trace>\n";
+          });
+
+          inkml += "</ink>";
+
+          // Display the InkML
+          document.getElementById("inkmlOutput").value = inkml;
+
+          // For preview, we need to convert back to the original format
+          var previewInkML = '<?xml version="1.0" encoding="UTF-8"?>\n';
+          previewInkML += '<ink xmlns="http://www.w3.org/2003/InkML">\n';
+          previewInkML += "    <definitions>\n";
+          previewInkML += '        <context xml:id="ctx1">\n';
+          previewInkML += '            <inkSource xml:id="inkSource1">\n';
+          previewInkML += "                <traceFormat>\n";
+          previewInkML +=
+            '                    <channel name="X" type="decimal"/>\n';
+          previewInkML +=
+            '                    <channel name="Y" type="decimal"/>\n';
+          previewInkML +=
+            '                    <channel name="F" type="decimal"/>\n';
+          previewInkML += "                </traceFormat>\n";
+          previewInkML += "            </inkSource>\n";
+          previewInkML += "        </context>\n";
+          previewInkML += "    </definitions>\n";
+
+          strokes.forEach(function (stroke) {
+            previewInkML += '    <trace contextRef="#ctx1">\n        ';
+            previewInkML += stroke
+              .map(function (point) {
+                // Convert back to canvas coordinates for preview
+                var x = (point.x / 1000) * canvas.width;
+                var y = (point.y / 1000) * canvas.height;
+                return x.toFixed(2) + " " + y.toFixed(2) + " 0.5";
+              })
+              .join(", ");
+            previewInkML += "\n    </trace>\n";
+          });
+
+          previewInkML += "</ink>";
+
+          // Clear the preview canvas
+          var previewCtx = previewCanvas.getContext("2d");
+          previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+
+          // Preview using the library
+          var ink = new Ink(previewInkML);
+          ink.draw(previewCanvas, false);
+        }
+
+        function clearCanvas() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          strokes = [];
+          startTime = null;
+          document.getElementById("inkmlOutput").value = "";
+          var previewCtx = previewCanvas.getContext("2d");
+          previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        }
+
+        // Event listeners
+        canvas.addEventListener("mousedown", startDrawing);
+        canvas.addEventListener("mousemove", draw);
+        canvas.addEventListener("mouseup", stopDrawing);
+        canvas.addEventListener("mouseout", stopDrawing);
+        document
+          .getElementById("clearButton")
+          .addEventListener("click", clearCanvas);
+      });
+    </script>
+  </head>
+  <body>
+    <h1 style="text-align: center">Draw Your Own InkML</h1>
+
+    <div id="controls" style="text-align: center">
+      <button id="clearButton">Clear Canvas</button>
+    </div>
+
+    <div class="canvas-container">
+      <div class="canvas-box">
+        <h2>Draw Here:</h2>
+        <canvas id="drawCanvas" width="400" height="300"></canvas>
+      </div>
+
+      <div class="canvas-box">
+        <h2>Preview (Using InkMLjs):</h2>
+        <canvas id="previewCanvas" width="400" height="300"></canvas>
+      </div>
+    </div>
+
+    <div style="max-width: 820px; margin: 20px auto">
+      <h2>Generated InkML:</h2>
+      <textarea
+        id="inkmlOutput"
+        style="width: 100%; height: 200px; font-family: monospace"
+      ></textarea>
+    </div>
+  </body>
+</html>
